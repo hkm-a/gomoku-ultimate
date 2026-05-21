@@ -1,6 +1,6 @@
 import { Player, Position, EMPTY, BLACK, WHITE, BOARD_SIZE, Difficulty } from '../core/types';
 import { Board } from '../core/Board';
-import { evaluate, getOrderedMoves } from './evaluate';
+import { evaluate, getOrderedMoves, createsOpenFour, createsDoubleThree } from './evaluate';
 
 // Search state for iterative deepening
 interface SearchContext {
@@ -67,6 +67,19 @@ export function findBestMove(
     if (testBoard.checkWinAt(pos.row, pos.col)) {
       return pos; // Block it
     }
+  }
+
+  // Pre-search: open-four or double-three = forced win
+  for (const pos of candidates) {
+    if (createsOpenFour(board, pos.row, pos.col, player)) return pos;
+  }
+  for (const pos of candidates) {
+    if (createsDoubleThree(board, pos.row, pos.col, player)) return pos;
+  }
+
+  // Pre-search: opponent has open-four → must block
+  for (const pos of candidates) {
+    if (createsOpenFour(board, pos.row, pos.col, opponent)) return pos;
   }
 
   // Iterative deepening
@@ -278,7 +291,7 @@ export function getSuggestions(
   const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 7);
   const allCandidates = getOrderedMoves(board, player);
 
-  // Always surface immediate wins — quickPointEval heuristic can miss them
+  // Always surface immediate wins and unstoppable threats
   const wins: Suggestion[] = [];
   const rest: Position[] = [];
   for (const pos of allCandidates) {
@@ -287,6 +300,10 @@ export function getSuggestions(
     test.setCell(pos.row, pos.col, player);
     if (test.checkWinAt(pos.row, pos.col)) {
       wins.push({ row: pos.row, col: pos.col, score: 10000001, winRate: 100 });
+    } else if (createsOpenFour(board, pos.row, pos.col, player)) {
+      wins.push({ row: pos.row, col: pos.col, score: 10000000, winRate: 99 });
+    } else if (createsDoubleThree(board, pos.row, pos.col, player)) {
+      wins.push({ row: pos.row, col: pos.col, score: 9999999, winRate: 98 });
     } else {
       rest.push(pos);
     }
