@@ -164,17 +164,29 @@ function evaluatePlayer(board: Board, player: Player): number {
 }
 
 /**
- * Quick evaluate a single point for candidate sorting.
- * This is much faster than full board evaluation.
+ * Threat-aware single-point evaluation for candidate sorting.
+ *
+ * Scores are deliberately spread wide so that forced wins/blocks
+ * always beat positional moves, giving alpha-beta the best ordering.
+ *
+ * Scoring tiers (per direction, summed across all 4):
+ *   FIVE         100,000,000  — immediate win
+ *   LIVE_FOUR     10,000,000  — opponent can't block both ends
+ *   RUSH_FOUR      1,000,000  — one end blocked, still very dangerous
+ *   BROKEN_FOUR      500,000  — X_XXX / XX_XX / XXX_X patterns
+ *   LIVE_THREE       100,000  — 2 open ends, can become open four
+ *   SLEEP_THREE       20,000  — 1 open end
+ *   LIVE_TWO           2,000  — 2 open ends
+ *   SLEEP_TWO            300  — 1 open end
+ *   POSITIONAL           10+  — center proximity tiebreaker
  */
-function quickPointEval(board: Board, row: number, col: number, player: Player): number {
+function threatScore(board: Board, row: number, col: number, player: Player): number {
   let score = 0;
   score += getPositionWeight(row, col) * 10;
 
-  // Temporarily place the piece
+  // Temporarily place the piece (safe: synchronous, restored before return)
   board.grid[row][col] = player;
 
-  // Check patterns through this point
   for (const [dr, dc] of DIRECTIONS) {
     let count = 1;
     let openEnds = 0;
@@ -199,18 +211,85 @@ function quickPointEval(board: Board, row: number, col: number, player: Player):
       else break;
     }
 
-    // Score based on length and openness
-    if (count >= 5) score += 100000;
-    else if (count === 4 && openEnds >= 1) score += 10000;
-    else if (count === 4) score += 1000;
-    else if (count === 3 && openEnds >= 2) score += 1000;
-    else if (count === 3 && openEnds >= 1) score += 200;
-    else if (count === 2 && openEnds >= 2) score += 100;
-    else if (count === 2 && openEnds >= 1) score += 30;
+    // Wide scoring tiers
+    if (count >= 5) score += 100_000_000;
+    else if (count === 4 && openEnds === 2) score += 10_000_000;
+    else if (count === 4 && openEnds === 1) score += 1_000_000;
+    else if (count === 4) score += 100_000;  // rare: both ends blocked
+    else if (count === 3 && openEnds === 2) score += 100_000;
+    else if (count === 3 && openEnds === 1) score += 20_000;
+    else if (count === 3) score += 2_000;
+    else if (count === 2 && openEnds === 2) score += 2_000;
+    else if (count === 2 && openEnds === 1) score += 300;
+    else if (count === 2) score += 50;
+    else if (count === 1 && openEnds >= 1) score += 10;
   }
+
+  // Bonus for creating two threats in different directions simultaneously
+  // (e.g. double-three fork).  The per-direction sum above already captures
+  // this to some degree, but a flat bonus makes forks stand out even more.
+  if (score >= 200_000) score += 500_000;
 
   board.grid[row][col] = EMPTY;
   return score;
+}
+
+/**
+ * Check if placing at (row, col) creates an unstoppable threat:
+ * open four (4 in a row, both ends free) — opponent can't block both.
+ */
+export function createsOpenFour(board: Board, row: number, col: number, player: Player): boolean {
+  const test = board.clone();
+  test.setCell(row, col, player);
+  for (const [dr, dc] of DIRECTIONS) {
+    let count = 1;
+    // Forward
+    let r = row + dr, c = col + dc;
+    while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && test.grid[r][c] === player) {
+      count++; r += dr; c += dc;
+    }
+    const open1 = r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && test.grid[r][c] === EMPTY;
+    // Backward
+    r = row - dr; c = col - dc;
+    while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && test.grid[r][c] === player) {
+      count++; r -= dr; c -= dc;
+    }
+    const open2 = r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && test.grid[r][c] === EMPTY;
+    if (count === 4 && open1 && open2) return true;
+  }
+  return false;
+}
+
+/**
+ * Check if placing at (row, col) creates two open threes (a fork)
+ * in different directions — also an unstoppable threat.
+ */
+export function createsDoubleThree(board: Board, row: number, col: number, player: Player): boolean {
+  const test = board.clone();
+  test.setCell(row, col, player);
+  let openThrees = 0;
+  for (const [dr, dc] of DIRECTIONS) {
+    let count = 1;
+    let r = row + dr, c = col + dc;
+    while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && test.grid[r][c] === player) {
+      count++; r += dr; c += dc;
+    }
+    const open1 = r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && test.grid[r][c] === EMPTY;
+    r = row - dr; c = col - dc;
+    while (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && test.grid[r][c] === player) {
+      count++; r -= dr; c -= dc;
+    }
+    const open2 = r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && test.grid[r][c] === EMPTY;
+    if (count === 3 && open1 && open2) openThrees++;
+  }
+  return openThrees >= 2;
+}
+
+/**
+ * Quick evaluate a single point for candidate sorting (legacy wrapper).
+ */
+function quickPointEval(board: Board, row: number, col: number, player: Player): number {
+  return threatScore(board, row, col, player);
 }
 
 /**
@@ -244,11 +323,14 @@ export function getOrderedMoves(board: Board, player: Player): Position[] {
     defenseScore: quickPointEval(board, pos.row, pos.col, player === BLACK ? WHITE : BLACK),
   }));
 
-  // Combined score (attack + defense)
+  // Combined score: highest threat tier wins; ties broken by attack > defense
   scored.sort((a, b) => {
-    const scoreA = Math.max(a.attackScore, a.defenseScore);
-    const scoreB = Math.max(b.attackScore, b.defenseScore);
-    return scoreB - scoreA;
+    const tierA = Math.max(a.attackScore, a.defenseScore);
+    const tierB = Math.max(b.attackScore, b.defenseScore);
+    if (tierA !== tierB) return tierB - tierA;
+    // Same threat tier: prefer the attacking move
+    if (a.attackScore !== b.attackScore) return b.attackScore - a.attackScore;
+    return b.defenseScore - a.defenseScore;
   });
 
   return scored.map(s => s.pos);
