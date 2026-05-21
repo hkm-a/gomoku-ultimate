@@ -35,6 +35,7 @@ export class UIManager {
   private currentDifficulty: Difficulty = 3;
   private aiPlayer: Player = WHITE; // Human plays BLACK by default
   private showSuggestions: boolean = false;
+  private suggestionGen: number = 0; // incremented on each move to discard stale computations
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -326,16 +327,11 @@ export class UIManager {
   private onStateChange(): void {
     this.updateUI();
 
-    // After any move, clear outdated suggestions; recompute after a brief fade
+    // After any move, clear outdated suggestions (they fade out)
+    // User can toggle the button again for fresh suggestions
+    this.suggestionGen++;
     if (this.showSuggestions) {
       this.renderer.setSuggestions([], false);
-      if (this.game.status === 'playing') {
-        setTimeout(() => {
-          if (this.showSuggestions && this.game.status === 'playing') {
-            this.computeSuggestions();
-          }
-        }, 400);
-      }
     }
 
     this.renderer.render(this.game);
@@ -473,8 +469,11 @@ export class UIManager {
 
   private async computeSuggestions(): Promise<void> {
     if (this.game.status !== 'playing') return;
+    const gen = this.suggestionGen;
     const player = this.game.currentPlayer;
     const suggestions = await this.ai.analyzePosition(this.game.board, player, this.currentDifficulty);
+    // Discard stale computation if board changed since we started
+    if (gen !== this.suggestionGen) return;
     this.renderer.setSuggestions(suggestions, true);
     this.renderer.render(this.game);
   }

@@ -223,9 +223,10 @@ function scoreMove(board: Board, row: number, col: number, player: Player, depth
   // Run a shallow minimax from the opponent's perspective
   // alphaBeta returns eval from `player`'s POV after opponent responds.
   // No negation: positive = opponent can't hurt us = good move.
+  // Cap at 20k nodes so suggestions never freeze the UI
   return alphaBeta(child, depth, -Infinity, Infinity, false, player, {
     nodesExplored: 0,
-    timeoutAt: Infinity,
+    timeoutAt: Date.now() + 200,
     abort: false,
     bestMove: null,
     bestScore: 0,
@@ -265,8 +266,8 @@ export function getSuggestions(
   difficulty: Difficulty,
   count: number = NUM_SUGGESTIONS,
 ): Suggestion[] {
-  const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 6);
-  const candidates = getOrderedMoves(board, player).slice(0, 25);
+  const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 4);
+  const candidates = getOrderedMoves(board, player).slice(0, 15);
 
   const scored: Suggestion[] = candidates.map(pos => {
     const score = scoreMove(board, pos.row, pos.col, player, searchDepth);
