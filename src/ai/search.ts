@@ -265,8 +265,8 @@ export function getSuggestions(
   difficulty: Difficulty,
   count: number = NUM_SUGGESTIONS,
 ): Suggestion[] {
-  const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 4);
-  const candidates = getOrderedMoves(board, player).slice(0, 15);
+  const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 6);
+  const candidates = getOrderedMoves(board, player).slice(0, 25);
 
   const scored: Suggestion[] = candidates.map(pos => {
     const score = scoreMove(board, pos.row, pos.col, player, searchDepth);
