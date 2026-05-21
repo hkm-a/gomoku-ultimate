@@ -231,15 +231,26 @@ function scoreMove(board: Board, row: number, col: number, player: Player, depth
 }
 
 /**
- * Score → win-rate via sigmoid.
- * After heuristic scores are in [-50000, 50000] range,
- * clamp & squash so we get intuitive percentages.
+ * Normalize suggestion scores to intuitive 5–95 win rates.
+ * Uses z-score + sigmoid within the suggestion set so the best
+ * move always stands out and closely-ranked moves show similar values.
  */
-function scoreToWinRate(raw: number): number {
-  const clamped = Math.max(-30000, Math.min(30000, raw));
-  // sigmoid: 1/(1+e^(-x/6000))
-  const rate = 1 / (1 + Math.exp(-clamped / 6000));
-  return Math.round(rate * 100);
+function normalizeWinRates(suggestions: Suggestion[]): Suggestion[] {
+  if (suggestions.length <= 1) {
+    return suggestions.map(s => ({ ...s, winRate: 50 }));
+  }
+
+  const scores = suggestions.map(s => s.score);
+  const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const variance = scores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / scores.length;
+  const std = Math.sqrt(variance) || 1;
+
+  return suggestions.map(s => {
+    const z = (s.score - mean) / std;
+    const percentile = 1 / (1 + Math.exp(-z * 1.5));
+    const winRate = Math.round(5 + percentile * 90);
+    return { ...s, winRate };
+  });
 }
 
 /**
@@ -252,20 +263,15 @@ export function getSuggestions(
   difficulty: Difficulty,
   count: number = NUM_SUGGESTIONS,
 ): Suggestion[] {
-  const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 4); // shallow for speed
-  const candidates = getOrderedMoves(board, player).slice(0, 15); // top 15 candidates
+  const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 4);
+  const candidates = getOrderedMoves(board, player).slice(0, 15);
 
   const scored: Suggestion[] = candidates.map(pos => {
     const score = scoreMove(board, pos.row, pos.col, player, searchDepth);
-    return {
-      row: pos.row,
-      col: pos.col,
-      score,
-      winRate: scoreToWinRate(score),
-    };
+    return { row: pos.row, col: pos.col, score, winRate: 50 };
   });
 
-  // Sort by score descending
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, count);
+  const top = scored.slice(0, count);
+  return normalizeWinRates(top);
 }
