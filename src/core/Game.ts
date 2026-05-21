@@ -96,7 +96,7 @@ export class Game {
         this.whiteTime = Math.max(0, this.whiteTime - elapsed);
       }
       this.onTimerTick?.();
-    }, 1000);
+    }, 200);
   }
 
   private stopTimer(): void {
