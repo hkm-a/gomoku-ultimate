@@ -244,6 +244,15 @@ function normalizeWinRates(suggestions: Suggestion[]): Suggestion[] {
   }
 
   const scores = suggestions.map(s => s.score);
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+
+  // All same score → equal win rates
+  if (max - min < 1) {
+    const wr = scores[0] >= 10000000 ? 99 : 50;
+    return suggestions.map(s => ({ ...s, winRate: wr }));
+  }
+
   const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
   const variance = scores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / scores.length;
   const std = Math.sqrt(variance) || 1;
@@ -267,14 +276,34 @@ export function getSuggestions(
   count: number = NUM_SUGGESTIONS,
 ): Suggestion[] {
   const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 7);
-  const candidates = getOrderedMoves(board, player).slice(0, 15);
+  const allCandidates = getOrderedMoves(board, player);
 
+  // Always surface immediate wins — quickPointEval heuristic can miss them
+  const wins: Suggestion[] = [];
+  const rest: Position[] = [];
+  for (const pos of allCandidates) {
+    if (wins.length >= count) break;
+    const test = board.clone();
+    test.setCell(pos.row, pos.col, player);
+    if (test.checkWinAt(pos.row, pos.col)) {
+      wins.push({ row: pos.row, col: pos.col, score: 10000001, winRate: 100 });
+    } else {
+      rest.push(pos);
+    }
+  }
+  if (wins.length >= count) {
+    return wins.slice(0, count);
+  }
+
+  // Score remaining candidates with shallow search
+  const candidates = rest.slice(0, 15);
   const scored: Suggestion[] = candidates.map(pos => {
     const score = scoreMove(board, pos.row, pos.col, player, searchDepth);
     return { row: pos.row, col: pos.col, score, winRate: 50 };
   });
 
   scored.sort((a, b) => b.score - a.score);
-  const top = scored.slice(0, count);
-  return normalizeWinRates(top);
+  const remaining = count - wins.length;
+  const result = [...wins, ...scored.slice(0, remaining)];
+  return normalizeWinRates(result);
 }
