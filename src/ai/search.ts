@@ -221,7 +221,9 @@ function scoreMove(board: Board, row: number, col: number, player: Player, depth
   // Quick terminal check
   if (child.checkWinAt(row, col)) return 10000000;
   // Run a shallow minimax from the opponent's perspective
-  return -alphaBeta(child, depth, -Infinity, Infinity, false, player, {
+  // alphaBeta returns eval from `player`'s POV after opponent responds.
+  // No negation: positive = opponent can't hurt us = good move.
+  return alphaBeta(child, depth, -Infinity, Infinity, false, player, {
     nodesExplored: 0,
     timeoutAt: Infinity,
     abort: false,
