@@ -35,6 +35,7 @@ export class UIManager {
   private currentDifficulty: Difficulty = 3;
   private aiPlayer: Player = WHITE; // Human plays BLACK by default
   private showSuggestions: boolean = false;
+  private suggestionGen: number = 0; // incremented on each move to discard stale computations
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -326,12 +327,22 @@ export class UIManager {
   private onStateChange(): void {
     this.updateUI();
 
-    // Refresh suggestions if toggled on
-    if (this.showSuggestions && this.game.status === 'playing') {
-      this.computeSuggestions();
+    // Clear outdated suggestions
+    this.suggestionGen++;
+    if (this.showSuggestions) {
+      this.renderer.setSuggestions([], false);
     }
 
     this.renderer.render(this.game);
+
+    // Auto-compute suggestions once per state change, but only on human's turn
+    // (during AI's turn the computation would block the AI search)
+    if (this.showSuggestions && this.game.status === 'playing') {
+      const isAiTurn = this.currentMode === 'pvai' && this.game.currentPlayer === this.aiPlayer;
+      if (!isAiTurn) {
+        this.computeSuggestions();
+      }
+    }
 
     // Check if AI should move
     if (this.game.status === 'playing' && this.game.isAIThinking()) {
@@ -355,6 +366,7 @@ export class UIManager {
     const thinkingIndicator = this.container.querySelector('#thinkingIndicator')!;
     thinkingIndicator.classList.remove('hidden');
 
+    const startTime = Date.now();
     const move = await this.ai.computeMove(
       this.game.board,
       this.game.currentPlayer,
@@ -363,6 +375,17 @@ export class UIManager {
     );
 
     thinkingIndicator.classList.add('hidden');
+
+    // Deduct AI thinking time from AI's clock (timer interval can't fire
+    // during synchronous search since it blocks the event loop)
+    if (this.game.timeLimit > 0) {
+      const elapsed = (Date.now() - startTime) / 1000;
+      if (this.game.currentPlayer === BLACK) {
+        this.game.blackTime = Math.max(0, this.game.blackTime - elapsed);
+      } else {
+        this.game.whiteTime = Math.max(0, this.game.whiteTime - elapsed);
+      }
+    }
 
     if (move && this.game.status === 'playing' && this.game.isAIThinking()) {
       this.game.makeMove(move.row, move.col);
@@ -466,8 +489,11 @@ export class UIManager {
 
   private async computeSuggestions(): Promise<void> {
     if (this.game.status !== 'playing') return;
+    const gen = this.suggestionGen;
     const player = this.game.currentPlayer;
     const suggestions = await this.ai.analyzePosition(this.game.board, player, this.currentDifficulty);
+    // Discard stale computation if board changed since we started
+    if (gen !== this.suggestionGen) return;
     this.renderer.setSuggestions(suggestions, true);
     this.renderer.render(this.game);
   }
@@ -595,6 +621,7 @@ export class UIManager {
   private formatTime(seconds: number): string {
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    const t = Math.floor((seconds % 1) * 10);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${t}`;
   }
 }

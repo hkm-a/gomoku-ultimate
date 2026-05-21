@@ -1,6 +1,6 @@
 import { Player, Position, EMPTY, BLACK, WHITE, BOARD_SIZE, Difficulty } from '../core/types';
 import { Board } from '../core/Board';
-import { evaluate, getOrderedMoves } from './evaluate';
+import { evaluate, getOrderedMoves, createsOpenFour, createsDoubleThree } from './evaluate';
 
 // Search state for iterative deepening
 interface SearchContext {
@@ -67,6 +67,19 @@ export function findBestMove(
     if (testBoard.checkWinAt(pos.row, pos.col)) {
       return pos; // Block it
     }
+  }
+
+  // Pre-search: open-four or double-three = forced win
+  for (const pos of candidates) {
+    if (createsOpenFour(board, pos.row, pos.col, player)) return pos;
+  }
+  for (const pos of candidates) {
+    if (createsDoubleThree(board, pos.row, pos.col, player)) return pos;
+  }
+
+  // Pre-search: opponent has open-four → must block
+  for (const pos of candidates) {
+    if (createsOpenFour(board, pos.row, pos.col, opponent)) return pos;
   }
 
   // Iterative deepening
@@ -223,9 +236,10 @@ function scoreMove(board: Board, row: number, col: number, player: Player, depth
   // Run a shallow minimax from the opponent's perspective
   // alphaBeta returns eval from `player`'s POV after opponent responds.
   // No negation: positive = opponent can't hurt us = good move.
+  // Cap at 20k nodes so suggestions never freeze the UI
   return alphaBeta(child, depth, -Infinity, Infinity, false, player, {
     nodesExplored: 0,
-    timeoutAt: Infinity,
+    timeoutAt: Date.now() + 200,
     abort: false,
     bestMove: null,
     bestScore: 0,
@@ -243,6 +257,15 @@ function normalizeWinRates(suggestions: Suggestion[]): Suggestion[] {
   }
 
   const scores = suggestions.map(s => s.score);
+  const min = Math.min(...scores);
+  const max = Math.max(...scores);
+
+  // All same score → equal win rates
+  if (max - min < 1) {
+    const wr = scores[0] >= 10000000 ? 99 : 50;
+    return suggestions.map(s => ({ ...s, winRate: wr }));
+  }
+
   const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
   const variance = scores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / scores.length;
   const std = Math.sqrt(variance) || 1;
@@ -265,15 +288,39 @@ export function getSuggestions(
   difficulty: Difficulty,
   count: number = NUM_SUGGESTIONS,
 ): Suggestion[] {
-  const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 4);
-  const candidates = getOrderedMoves(board, player).slice(0, 15);
+  const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 7);
+  const allCandidates = getOrderedMoves(board, player);
 
+  // Always surface immediate wins and unstoppable threats
+  const wins: Suggestion[] = [];
+  const rest: Position[] = [];
+  for (const pos of allCandidates) {
+    if (wins.length >= count) break;
+    const test = board.clone();
+    test.setCell(pos.row, pos.col, player);
+    if (test.checkWinAt(pos.row, pos.col)) {
+      wins.push({ row: pos.row, col: pos.col, score: 10000001, winRate: 100 });
+    } else if (createsOpenFour(board, pos.row, pos.col, player)) {
+      wins.push({ row: pos.row, col: pos.col, score: 10000000, winRate: 99 });
+    } else if (createsDoubleThree(board, pos.row, pos.col, player)) {
+      wins.push({ row: pos.row, col: pos.col, score: 9999999, winRate: 98 });
+    } else {
+      rest.push(pos);
+    }
+  }
+  if (wins.length >= count) {
+    return wins.slice(0, count);
+  }
+
+  // Score remaining candidates with shallow search
+  const candidates = rest.slice(0, 15);
   const scored: Suggestion[] = candidates.map(pos => {
     const score = scoreMove(board, pos.row, pos.col, player, searchDepth);
     return { row: pos.row, col: pos.col, score, winRate: 50 };
   });
 
   scored.sort((a, b) => b.score - a.score);
-  const top = scored.slice(0, count);
-  return normalizeWinRates(top);
+  const remaining = count - wins.length;
+  const result = [...wins, ...scored.slice(0, remaining)];
+  return normalizeWinRates(result);
 }
