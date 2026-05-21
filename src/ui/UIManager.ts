@@ -327,19 +327,11 @@ export class UIManager {
   private onStateChange(): void {
     this.updateUI();
 
-    // After any move, clear outdated suggestions; recompute after a brief fade
-    // suggestionGen is incremented so stale setTimeout callbacks are discarded
+    // After any move, clear outdated suggestions (they fade out)
+    // User can toggle the button again for fresh suggestions
     this.suggestionGen++;
     if (this.showSuggestions) {
       this.renderer.setSuggestions([], false);
-      if (this.game.status === 'playing') {
-        const gen = this.suggestionGen;
-        setTimeout(() => {
-          if (this.showSuggestions && this.game.status === 'playing' && gen === this.suggestionGen) {
-            this.computeSuggestions();
-          }
-        }, 400);
-      }
     }
 
     this.renderer.render(this.game);
