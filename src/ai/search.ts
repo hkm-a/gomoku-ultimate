@@ -199,3 +199,73 @@ function alphaBeta(
     return minEval;
   }
 }
+
+// ===== Suggestions API (for "show me the best moves") =====
+
+export interface Suggestion {
+  row: number;
+  col: number;
+  score: number;
+  winRate: number; // 0–100
+}
+
+const NUM_SUGGESTIONS = 6;
+
+/**
+ * Score a single move by doing a shallow search + evaluation.
+ * Used for quick suggestions without full iterative deepening.
+ */
+function scoreMove(board: Board, row: number, col: number, player: Player, depth: number): number {
+  const child = board.clone();
+  child.setCell(row, col, player);
+  // Quick terminal check
+  if (child.checkWinAt(row, col)) return 10000000;
+  // Run a shallow minimax from the opponent's perspective
+  return -alphaBeta(child, depth, -Infinity, Infinity, false, player, {
+    nodesExplored: 0,
+    timeoutAt: Infinity,
+    abort: false,
+    bestMove: null,
+    bestScore: 0,
+  });
+}
+
+/**
+ * Score → win-rate via sigmoid.
+ * After heuristic scores are in [-50000, 50000] range,
+ * clamp & squash so we get intuitive percentages.
+ */
+function scoreToWinRate(raw: number): number {
+  const clamped = Math.max(-30000, Math.min(30000, raw));
+  // sigmoid: 1/(1+e^(-x/6000))
+  const rate = 1 / (1 + Math.exp(-clamped / 6000));
+  return Math.round(rate * 100);
+}
+
+/**
+ * Returns top N scored positions for the current player.
+ * Does a shallow search so it's fast enough for on-demand display.
+ */
+export function getSuggestions(
+  board: Board,
+  player: Player,
+  difficulty: Difficulty,
+  count: number = NUM_SUGGESTIONS,
+): Suggestion[] {
+  const searchDepth = Math.min(DIFFICULTY_DEPTH[difficulty], 4); // shallow for speed
+  const candidates = getOrderedMoves(board, player).slice(0, 15); // top 15 candidates
+
+  const scored: Suggestion[] = candidates.map(pos => {
+    const score = scoreMove(board, pos.row, pos.col, player, searchDepth);
+    return {
+      row: pos.row,
+      col: pos.col,
+      score,
+      winRate: scoreToWinRate(score),
+    };
+  });
+
+  // Sort by score descending
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, count);
+}

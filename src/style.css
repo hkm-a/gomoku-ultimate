@@ -408,6 +408,16 @@ body {
   background: var(--bg-hover);
 }
 
+.suggestions-btn.active {
+  background: #2e7d32;
+  border-color: #1b5e20;
+  color: #fff;
+}
+
+.suggestions-btn.active:hover {
+  background: #388e3c;
+}
+
 /* Action buttons */
 .action-buttons {
   display: grid;

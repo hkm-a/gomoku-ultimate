@@ -1,14 +1,19 @@
 import { Board } from '../core/Board';
-import { findBestMove } from './search';
+import { findBestMove, getSuggestions, Suggestion } from './search';
 import { Player, Position, Difficulty, EMPTY } from '../core/types';
 
 export type AIProgressCallback = (thinking: boolean) => void;
 
 export class AI {
   private thinking: boolean = false;
+  private cachedSuggestions: Suggestion[] = [];
 
   isThinking(): boolean {
     return this.thinking;
+  }
+
+  getCachedSuggestions(): Suggestion[] {
+    return this.cachedSuggestions;
   }
 
   /**
@@ -50,5 +55,26 @@ export class AI {
         resolve(move);
       }, 50); // Small delay for UI responsiveness
     });
+  }
+
+  /**
+   * Analyze the current position and cache suggestions.
+   * Runs asynchronously to avoid blocking the UI.
+   */
+  async analyzePosition(
+    board: Board,
+    player: Player,
+    difficulty: Difficulty,
+  ): Promise<Suggestion[]> {
+    return new Promise(resolve => {
+      setTimeout(() => {
+        this.cachedSuggestions = getSuggestions(board, player, difficulty);
+        resolve(this.cachedSuggestions);
+      }, 10);
+    });
+  }
+
+  clearSuggestions(): void {
+    this.cachedSuggestions = [];
   }
 }

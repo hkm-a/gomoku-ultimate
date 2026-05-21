@@ -1,6 +1,7 @@
 import { BOARD_SIZE, Position, Player, BLACK, WHITE, EMPTY } from '../core/types';
 import { Board } from '../core/Board';
 import { Game } from '../core/Game';
+import { Suggestion } from '../ai/search';
 
 export interface ThemeColors {
   boardBg: string;
@@ -73,6 +74,10 @@ export class BoardRenderer {
   private winAnimStart: number = 0;
   private darkMode: boolean = false;
 
+  // Suggestions
+  private suggestions: Suggestion[] = [];
+  private showSuggestions: boolean = false;
+
   get theme(): ThemeColors {
     return this.darkMode ? DARK_THEME : LIGHT_THEME;
   }
@@ -85,6 +90,11 @@ export class BoardRenderer {
 
   setDarkMode(dark: boolean): void {
     this.darkMode = dark;
+  }
+
+  setSuggestions(suggestions: Suggestion[], show: boolean): void {
+    this.suggestions = suggestions;
+    this.showSuggestions = show;
   }
 
   resize(): void {
@@ -188,6 +198,11 @@ export class BoardRenderer {
     // Winning line
     if (game.status === 'over' && game.winLine.length > 0) {
       this.drawWinLine(ctx, game.winLine, t);
+    }
+
+    // Suggestions (AI analysis overlay)
+    if (this.showSuggestions && this.suggestions.length > 0 && game.status === 'playing') {
+      this.drawSuggestions(ctx, t);
     }
 
     // Hover
@@ -453,6 +468,66 @@ export class BoardRenderer {
     }
 
     ctx.restore();
+  }
+
+  // ===== Suggestions =====
+
+  private drawSuggestions(ctx: CanvasRenderingContext2D, t: ThemeColors): void {
+    const now = Date.now();
+    const pulse = Math.sin(now / 400) * 0.08 + 0.92; // subtle breathing
+
+    for (const s of this.suggestions) {
+      const { row, col, winRate } = s;
+      const x = this.padding + col * this.cellSize;
+      const y = this.padding + row * this.cellSize;
+
+      // Skip occupied cells
+      // (suggestions should only be empty cells, but guard just in case)
+
+      // Color: green (high) → yellow (mid) → red (low)
+      const hue = winRate * 1.2; // 0=red, 120=green
+      const color = `hsla(${hue}, 85%, ${55 * pulse}%, 0.75)`;
+      const glowColor = `hsla(${hue}, 90%, 60%, 0.25)`;
+
+      ctx.save();
+
+      // Glow ring
+      const ringR = this.stoneRadius * 0.85;
+      ctx.beginPath();
+      ctx.arc(x, y, ringR + 3, 0, Math.PI * 2);
+      ctx.fillStyle = glowColor;
+      ctx.fill();
+
+      // Colored ring
+      ctx.beginPath();
+      ctx.arc(x, y, ringR, 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5 * pulse;
+      ctx.stroke();
+
+      // Center dot
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      // Win rate label
+      const label = `${winRate}%`;
+      ctx.font = `bold ${Math.max(10, this.cellSize * 0.28)}px var(--font-mono, monospace)`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+
+      // Label shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      const labelY = y - this.stoneRadius * 0.6;
+      ctx.fillText(label, x + 1, labelY + 1);
+
+      // Label text
+      ctx.fillStyle = winRate >= 50 ? '#ffffff' : '#ffdddd';
+      ctx.fillText(label, x, labelY);
+
+      ctx.restore();
+    }
   }
 
   destroy(): void {

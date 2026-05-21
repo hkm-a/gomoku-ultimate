@@ -29,10 +29,12 @@ export class UIManager {
   private resultTitleEl!: HTMLElement;
   private resultSubtitleEl!: HTMLElement;
   private themeBtn!: HTMLElement;
+  private suggestBtn!: HTMLElement;
 
   private currentMode: GameMode = 'pvai';
   private currentDifficulty: Difficulty = 3;
   private aiPlayer: Player = WHITE; // Human plays BLACK by default
+  private showSuggestions: boolean = false;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -168,6 +170,10 @@ export class UIManager {
                 <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22l2.37.78c1.05-3.19 4.06-5.5 7.59-5.5 1.96 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg>
                 <span>重做</span>
               </button>
+              <button class="btn btn-secondary suggestions-btn" id="suggestBtn" title="AI 建议">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                <span>建议</span>
+              </button>
             </div>
 
             <!-- Move history -->
@@ -226,6 +232,7 @@ export class UIManager {
     this.resultTitleEl = this.container.querySelector('#resultTitle')!;
     this.resultSubtitleEl = this.container.querySelector('#resultSubtitle')!;
     this.themeBtn = this.container.querySelector('#themeBtn')!;
+    this.suggestBtn = this.container.querySelector('#suggestBtn')!;
   }
 
   private bindEvents(): void {
@@ -278,6 +285,7 @@ export class UIManager {
     this.redoBtn.addEventListener('click', () => this.redoMove());
     this.switchSideBtn.addEventListener('click', () => this.switchSide());
     this.themeBtn.addEventListener('click', () => this.toggleTheme());
+    this.suggestBtn.addEventListener('click', () => this.toggleSuggestions());
 
     // Result overlay
     this.container.querySelector('#rematchBtn')?.addEventListener('click', () => {
@@ -317,6 +325,12 @@ export class UIManager {
 
   private onStateChange(): void {
     this.updateUI();
+
+    // Refresh suggestions if toggled on
+    if (this.showSuggestions && this.game.status === 'playing') {
+      this.computeSuggestions();
+    }
+
     this.renderer.render(this.game);
 
     // Check if AI should move
@@ -436,6 +450,25 @@ export class UIManager {
     this.container.querySelector('.game-wrapper')!.classList.toggle('dark', this.darkMode);
     this.renderer.setDarkMode(this.darkMode);
     this.renderer.resize();
+    this.renderer.render(this.game);
+  }
+
+  private toggleSuggestions(): void {
+    this.showSuggestions = !this.showSuggestions;
+    this.suggestBtn.classList.toggle('active', this.showSuggestions);
+    if (this.showSuggestions && this.game.status === 'playing') {
+      this.computeSuggestions();
+    } else {
+      this.renderer.setSuggestions([], false);
+    }
+    this.renderer.render(this.game);
+  }
+
+  private async computeSuggestions(): Promise<void> {
+    if (this.game.status !== 'playing') return;
+    const player = this.game.currentPlayer;
+    const suggestions = await this.ai.analyzePosition(this.game.board, player, this.currentDifficulty);
+    this.renderer.setSuggestions(suggestions, true);
     this.renderer.render(this.game);
   }
 
