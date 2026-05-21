@@ -326,9 +326,16 @@ export class UIManager {
   private onStateChange(): void {
     this.updateUI();
 
-    // Refresh suggestions if toggled on
-    if (this.showSuggestions && this.game.status === 'playing') {
-      this.computeSuggestions();
+    // After any move, clear outdated suggestions; recompute after a brief fade
+    if (this.showSuggestions) {
+      this.renderer.setSuggestions([], false);
+      if (this.game.status === 'playing') {
+        setTimeout(() => {
+          if (this.showSuggestions && this.game.status === 'playing') {
+            this.computeSuggestions();
+          }
+        }, 400);
+      }
     }
 
     this.renderer.render(this.game);
