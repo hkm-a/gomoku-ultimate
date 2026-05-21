@@ -62,9 +62,9 @@ export class BoardRenderer {
   private animFrame: number | null = null;
 
   // Layout
-  private padding: number = 30;
-  private cellSize: number = 36;
-  private stoneRadius: number = 15;
+  private padding: number = 32;
+  private cellSize: number = 38;
+  private stoneRadius: number = 16;
   private totalSize: number = 0;
 
   // Animation
@@ -88,15 +88,14 @@ export class BoardRenderer {
   }
 
   resize(): void {
-    const container = this.canvas.parentElement;
-    if (!container) return;
+    const container = this.canvas.parentElement!;
+    const rect = container.getBoundingClientRect();
 
-    const maxWidth = Math.min(container.clientWidth - 20, 640);
-    const maxHeight = Math.min(container.clientHeight - 20, 640);
-    const size = Math.min(maxWidth, maxHeight);
+    // Use the smaller of container width/height to keep square
+    const maxSize = Math.min(rect.width, rect.height);
 
-    this.cellSize = (size - 2 * this.padding) / (BOARD_SIZE - 1);
-    this.stoneRadius = Math.max(8, this.cellSize * 0.42);
+    this.cellSize = (maxSize - 2 * this.padding) / (BOARD_SIZE - 1);
+    this.stoneRadius = Math.max(9, this.cellSize * 0.43);
     this.totalSize = this.cellSize * (BOARD_SIZE - 1) + 2 * this.padding;
 
     const dpr = window.devicePixelRatio || 1;

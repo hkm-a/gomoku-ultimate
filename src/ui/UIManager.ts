@@ -1,5 +1,5 @@
 import { Game } from '../core/Game';
-import { Player, GameMode, Difficulty, GameConfig, BLACK, WHITE, EMPTY, BOARD_SIZE, MODE_NAMES, MODE_NAMES_EN, DIFFICULTY_NAMES, DIFFICULTY_NAMES_EN } from '../core/types';
+import { Player, GameMode, Difficulty, GameConfig, BLACK, WHITE, EMPTY, BOARD_SIZE, MODE_NAMES, DIFFICULTY_NAMES } from '../core/types';
 import { BoardRenderer } from './BoardRenderer';
 import { AI } from '../ai/AI';
 
@@ -51,6 +51,7 @@ export class UIManager {
     this.renderer = new BoardRenderer(this.canvas);
 
     this.game.onStateChange = () => this.onStateChange();
+    this.game.onTimerTick = () => this.onTimerTick();
     this.game.onMoveMade = () => this.onMoveMade();
 
     this.renderer.render(this.game);
@@ -287,11 +288,13 @@ export class UIManager {
       this.hideOverlay();
     });
 
-    // Window resize
-    window.addEventListener('resize', () => {
+    // ResizeObserver for responsive canvas
+    const canvasContainer = this.canvas.parentElement!;
+    const resizeObserver = new ResizeObserver(() => {
       this.renderer.resize();
       this.renderer.render(this.game);
     });
+    resizeObserver.observe(canvasContainer);
   }
 
   private toggleDropdown(menu: HTMLElement): void {
@@ -319,6 +322,14 @@ export class UIManager {
     // Check if AI should move
     if (this.game.status === 'playing' && this.game.isAIThinking()) {
       this.triggerAIMove();
+    }
+  }
+
+  // Lightweight timer-only update — does NOT re-render the board
+  private onTimerTick(): void {
+    if (this.game.timeLimit > 0) {
+      this.blackTimerEl.textContent = this.formatTime(this.game.blackTime);
+      this.whiteTimerEl.textContent = this.formatTime(this.game.whiteTime);
     }
   }
 
@@ -392,6 +403,7 @@ export class UIManager {
 
     this.game = new Game(config);
     this.game.onStateChange = () => this.onStateChange();
+    this.game.onTimerTick = () => this.onTimerTick();
     this.game.onMoveMade = () => this.onMoveMade();
     this.game.start();
 

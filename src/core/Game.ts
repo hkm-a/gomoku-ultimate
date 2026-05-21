@@ -28,6 +28,7 @@ export class Game {
   // Callbacks
   onStateChange?: () => void;
   onMoveMade?: (move: Move) => void;
+  onTimerTick?: () => void;
 
   constructor(config: GameConfig) {
     this.board = new Board();
@@ -86,15 +87,16 @@ export class Game {
     if (this.timeLimit <= 0) return;
     this.lastMoveTime = Date.now();
     this.timerInterval = window.setInterval(() => {
-      const elapsed = (Date.now() - this.lastMoveTime) / 1000;
+      const now = Date.now();
+      const elapsed = (now - this.lastMoveTime) / 1000;
+      this.lastMoveTime = now;
       if (this.currentPlayer === BLACK) {
-        this.blackTime = Math.max(0, this.blackTime - elapsed / 10); // update every 100ms
+        this.blackTime = Math.max(0, this.blackTime - elapsed);
       } else {
-        this.whiteTime = Math.max(0, this.whiteTime - elapsed / 10);
+        this.whiteTime = Math.max(0, this.whiteTime - elapsed);
       }
-      this.lastMoveTime = Date.now();
-      this.onStateChange?.();
-    }, 100);
+      this.onTimerTick?.();
+    }, 1000);
   }
 
   private stopTimer(): void {
@@ -235,7 +237,7 @@ export class Game {
   isAIThinking(): boolean {
     if (this.status !== 'playing') return false;
     if (this.mode === 'pvp') return false;
-    if (this.mode === 'pvai') return this.currentPlayer !== this.aiPlayer;
+    if (this.mode === 'pvai') return this.currentPlayer === this.aiPlayer;
     if (this.mode === 'aivai') return true;
     return false;
   }

@@ -72,7 +72,7 @@ body {
   background: var(--bg-card);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  max-width: 1100px;
+  max-width: 1200px;
   width: 100%;
   overflow: hidden;
   transition: background 0.3s, box-shadow 0.3s;
@@ -120,15 +120,16 @@ body {
 /* ===== Game Body ===== */
 .game-body {
   display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 0;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 20px;
   padding: 20px;
 }
 
-@media (max-width: 820px) {
+@media (max-width: 860px) {
   .game-body {
     grid-template-columns: 1fr;
     gap: 16px;
+    padding: 16px;
   }
 }
 
@@ -137,7 +138,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Player bar */
@@ -147,7 +150,6 @@ body {
   justify-content: center;
   gap: 16px;
   width: 100%;
-  max-width: 640px;
 }
 
 .player-info {
@@ -235,26 +237,27 @@ body {
   overflow: hidden;
   box-shadow: 0 0 0 1px var(--border-color);
   background: #d4a745;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-height: calc(100vh - 200px);
 }
 
 .canvas-container canvas {
   display: block;
   cursor: pointer;
-  max-width: 100%;
-  height: auto;
 }
 
 /* ===== Controls Section ===== */
 .controls-section {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 0 8px 0 20px;
+  gap: 12px;
+  min-width: 0;
 }
 
-@media (max-width: 820px) {
+@media (max-width: 860px) {
   .controls-section {
-    padding: 0;
+    width: 100%;
   }
 }
 
