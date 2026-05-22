@@ -1,8 +1,23 @@
 import { Board } from '../core/Board';
-import { findBestMove, getSuggestions, Suggestion } from './search';
+import { getSuggestions, Suggestion } from './search';
+import { computeTSSMove } from './tss';
 import { Player, Position, Difficulty, EMPTY } from '../core/types';
 
 export type AIProgressCallback = (thinking: boolean) => void;
+
+/**
+ * Difficulty → TSS depth mapping.
+ *   Easy=1   → d1 (fast, weaker)
+ *   Medium=2 → d2 (strong, fast)
+ *   Hard=3   → d3 (very strong, balanced)
+ *   Expert=4 → d4 (strongest)
+ */
+const DIFFICULTY_DEPTH: Record<number, number> = {
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 4,
+};
 
 export class AI {
   private thinking: boolean = false;
@@ -17,8 +32,8 @@ export class AI {
   }
 
   /**
-   * Compute the best move for the given player.
-   * Returns a promise to allow async UI updates.
+   * Compute the best move using TSS (Threat Space Search).
+   * Difficulty controls search depth: 1→d1, 2→d2, 3→d3, 4→d4.
    */
   async computeMove(
     board: Board,
@@ -29,23 +44,17 @@ export class AI {
     this.thinking = true;
     onProgress?.(true);
 
-    // Use setTimeout to allow UI thread to update
     return new Promise(resolve => {
       setTimeout(() => {
-        const move = findBestMove(board.clone(), player, difficulty);
+        const depth = DIFFICULTY_DEPTH[difficulty] ?? 3;
+        let move = computeTSSMove(board, player, depth, 5);
 
-        // Add small random variation for easy/medium
-        if (move && difficulty <= 2) {
-          const noise = Math.random();
-          if (difficulty === 1 && noise < 0.3) {
-            // Easy: sometimes pick a sub-optimal move
+        // Easy: add random blunders
+        if (move && difficulty === 1) {
+          if (Math.random() < 0.3) {
             const candidates = board.getCandidateMoves(2);
             if (candidates.length > 1) {
-              const randomPick = candidates[Math.floor(Math.random() * candidates.length)];
-              this.thinking = false;
-              onProgress?.(false);
-              resolve(randomPick);
-              return;
+              move = candidates[Math.floor(Math.random() * candidates.length)];
             }
           }
         }
@@ -53,13 +62,13 @@ export class AI {
         this.thinking = false;
         onProgress?.(false);
         resolve(move);
-      }, 50); // Small delay for UI responsiveness
+      }, 50);
     });
   }
 
   /**
-   * Analyze the current position and cache suggestions.
-   * Runs asynchronously to avoid blocking the UI.
+   * Analyze the current position and cache suggestions (hints feature).
+   * Still uses search.ts for multi-move suggestions.
    */
   async analyzePosition(
     board: Board,
