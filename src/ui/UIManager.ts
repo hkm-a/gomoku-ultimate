@@ -380,11 +380,7 @@ export class UIManager {
     // during synchronous search since it blocks the event loop)
     if (this.game.timeLimit > 0) {
       const elapsed = (Date.now() - startTime) / 1000;
-      if (this.game.currentPlayer === BLACK) {
-        this.game.blackTime = Math.max(0, this.game.blackTime - elapsed);
-      } else {
-        this.game.whiteTime = Math.max(0, this.game.whiteTime - elapsed);
-      }
+      if (this.game.consumeCurrentPlayerTime(elapsed)) return;
     }
 
     if (move && this.game.status === 'playing' && this.game.isAIThinking()) {

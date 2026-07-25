@@ -23,7 +23,7 @@ export class Game {
   whiteTime: number;
   timeLimit: number;
   private lastMoveTime: number;
-  private timerInterval: number | null;
+  private timerInterval: ReturnType<typeof setInterval> | null;
 
   // Callbacks
   onStateChange?: () => void;
@@ -86,15 +86,11 @@ export class Game {
     this.stopTimer();
     if (this.timeLimit <= 0) return;
     this.lastMoveTime = Date.now();
-    this.timerInterval = window.setInterval(() => {
+    this.timerInterval = setInterval(() => {
       const now = Date.now();
       const elapsed = (now - this.lastMoveTime) / 1000;
       this.lastMoveTime = now;
-      if (this.currentPlayer === BLACK) {
-        this.blackTime = Math.max(0, this.blackTime - elapsed);
-      } else {
-        this.whiteTime = Math.max(0, this.whiteTime - elapsed);
-      }
+      this.consumeCurrentPlayerTime(elapsed);
       this.onTimerTick?.();
     }, 200);
   }
@@ -104,6 +100,32 @@ export class Game {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
     }
+  }
+
+  /**
+   * 扣除当前执棋方用时。超时由规则层结算，避免界面和 AI 分别修改时钟。
+   * 返回值表示本次扣时是否导致对局结束。
+   */
+  consumeCurrentPlayerTime(elapsedSeconds: number): boolean {
+    if (this.status !== 'playing' || this.timeLimit <= 0 || !Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) {
+      return false;
+    }
+
+    if (this.currentPlayer === BLACK) {
+      this.blackTime = Math.max(0, this.blackTime - elapsedSeconds);
+      if (this.blackTime > 0) return false;
+      this.winner = WHITE;
+    } else {
+      this.whiteTime = Math.max(0, this.whiteTime - elapsedSeconds);
+      if (this.whiteTime > 0) return false;
+      this.winner = BLACK;
+    }
+
+    this.winLine = [];
+    this.status = 'over';
+    this.stopTimer();
+    this.onStateChange?.();
+    return true;
   }
 
   // ===== Move Execution =====
@@ -177,6 +199,7 @@ export class Game {
     }
 
     this.lastMoveTime = Date.now();
+    if (this.timeLimit > 0) this.startTimer();
     this.onStateChange?.();
     return true;
   }
@@ -190,6 +213,7 @@ export class Game {
 
     const move = this.redoStack.pop()!;
     this.makeMoveInternal(move);
+    if (this.status === 'playing' && this.timeLimit > 0) this.startTimer();
     this.onStateChange?.();
     return true;
   }
