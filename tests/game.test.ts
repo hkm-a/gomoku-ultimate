@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Game } from '../src/core/Game';
 import { BLACK, WHITE, type GameConfig } from '../src/core/types';
+import { UIManager } from '../src/ui/UIManager';
 
 const config: GameConfig = {
   mode: 'pvp',
@@ -58,5 +59,39 @@ describe('计时规则', () => {
     expect(game.status).toBe('playing');
     expect(game.currentPlayer).toBe(BLACK);
     expect(game.blackTime).toBe(0);
+  });
+});
+
+describe('异步 AI 落子', () => {
+  it('重开或换边后拒绝旧棋局的计算结果', async () => {
+    let resolveMove!: (move: { row: number; col: number }) => void;
+    const oldGame = startGame(0);
+    const newGame = startGame(0);
+
+    expect(oldGame.makeMove(7, 7)).toBe(true);
+    expect(newGame.makeMove(7, 7)).toBe(true);
+
+    const ui = Object.create(UIManager.prototype) as UIManager;
+    const thinkingIndicator = { classList: { add: vi.fn(), remove: vi.fn() } };
+    const ai = {
+      computeMove: vi.fn(() => new Promise<{ row: number; col: number }>((resolve) => {
+        resolveMove = resolve;
+      })),
+    };
+
+    Object.assign(ui as object, {
+      ai,
+      game: oldGame,
+      currentDifficulty: 3,
+      container: { querySelector: vi.fn(() => thinkingIndicator) },
+    });
+
+    const pendingMove = (ui as any).triggerAIMove();
+    (ui as any).game = newGame;
+    resolveMove({ row: 7, col: 8 });
+    await pendingMove;
+
+    expect(newGame.board.moveCount).toBe(1);
+    expect(newGame.board.getCell(7, 8)).toBe(0);
   });
 });
