@@ -364,27 +364,31 @@ export class UIManager {
 
   private async triggerAIMove(): Promise<void> {
     const thinkingIndicator = this.container.querySelector('#thinkingIndicator')!;
+    const game = this.game;
     thinkingIndicator.classList.remove('hidden');
 
     const startTime = Date.now();
     const move = await this.ai.computeMove(
-      this.game.board,
-      this.game.currentPlayer,
+      game.board,
+      game.currentPlayer,
       this.currentDifficulty,
       () => {}
     );
 
     thinkingIndicator.classList.add('hidden');
 
+    // 重开或换边会创建新的棋局；旧计算结果不能写入新棋局。
+    if (this.game !== game) return;
+
     // Deduct AI thinking time from AI's clock (timer interval can't fire
     // during synchronous search since it blocks the event loop)
-    if (this.game.timeLimit > 0) {
+    if (game.timeLimit > 0) {
       const elapsed = (Date.now() - startTime) / 1000;
-      if (this.game.consumeCurrentPlayerTime(elapsed)) return;
+      if (game.consumeCurrentPlayerTime(elapsed)) return;
     }
 
-    if (move && this.game.status === 'playing' && this.game.isAIThinking()) {
-      this.game.makeMove(move.row, move.col);
+    if (move && game.status === 'playing' && game.isAIThinking()) {
+      game.makeMove(move.row, move.col);
     }
   }
 
